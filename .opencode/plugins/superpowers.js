@@ -81,6 +81,12 @@ When skills reference tools you don't have, substitute OpenCode equivalents:
 - \`Task\` tool (general-purpose) → \`task(run_in_background=false, ...)\` — default for any unspecified task dispatch
 - Resume same agent with \`task(task_id="ses_xxx", run_in_background=false)\` instead of spawning fresh for fixes
 - IMPORTANT: \`run_in_background\` is ALWAYS required. Never call \`task()\` without it.
+
+**Slim agent names (when running under oh-my-opencode-slim):**
+- Implementer/worker → \`task(subagent_type="fixer", run_in_background=true)\`
+- Codebase explorer → \`task(subagent_type="explorer", run_in_background=true)\`
+- Docs/reference lookup → \`task(subagent_type="librarian", run_in_background=false)\`
+- Architecture/code review → \`task(subagent_type="oracle", run_in_background=false)\`
 - \`Skill\` tool → OpenCode's native \`skill\` tool
 - \`Read\`, \`Write\`, \`Edit\`, \`Bash\` → Your native tools
 
