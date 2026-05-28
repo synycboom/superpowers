@@ -50,24 +50,45 @@ Group them into **parallel batches** and **sequential chains**.
 
 #### For Independent Tasks (Parallel Batch)
 
-Dispatch multiple implementers simultaneously:
+<PARALLEL_DISPATCH_RULES>
+RULE 1: ALL background task() calls for a parallel batch MUST appear in ONE single response.
+         Calling task() in separate responses = sequential, not parallel. Wrong.
+RULE 2: Every parallel task() MUST be a background task: run_in_background=true.
+RULE 3: After the last background task() call, STOP. Do not write anything else.
+         Do not say "I've dispatched...". Do not summarize. Just stop.
+RULE 4: Wait silently for <system-reminder> notifications. Do NOT call
+         background_output() until notified.
+RULE 5: Collect ALL background task results before reviewing any of them.
+
+VIOLATION CHECK: If you find yourself calling task() in one response and then
+                 calling task() again in the next response for the same batch,
+                 you are doing it wrong. Start over with all background task
+                 calls in one response.
+</PARALLEL_DISPATCH_RULES>
 
 ```typescript
-// Fire 2-3 independent implementers as background tasks
-task(category="unspecified-high", load_skills=["tdd"],
+// ALL THREE calls in ONE response — no text before or after
+task(subagent_type="general", load_skills=["tdd"],
   run_in_background=true,
-  description="Implement Task 1: [name]",
+  description="Implement Task N: [name]",
   prompt="[Use implementer-prompt.md template - see below]")
 
-task(category="unspecified-high", load_skills=["tdd"],
+task(subagent_type="general", load_skills=["tdd"],
   run_in_background=true,
-  description="Implement Task 2: [name]",
+  description="Implement Task M: [name]",
   prompt="[Use implementer-prompt.md template - see below]")
 
-// End response. Wait for <system-reminder> notifications.
+task(subagent_type="general", load_skills=["tdd"],
+  run_in_background=true,
+  description="Implement Task P: [name]",
+  prompt="[Use implementer-prompt.md template - see below]")
+
+// ← STOP HERE. End response. No summary. No next steps. Just stop.
+// Wait for <system-reminder> for each task_id.
+// Then collect: background_output(task_id="...") for each.
 ```
 
-After all complete, collect results and run reviews sequentially.
+After ALL complete, collect results, THEN run reviews sequentially.
 
 #### For Dependent Tasks (Sequential Chain)
 
