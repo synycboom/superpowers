@@ -30,15 +30,15 @@ BASE_SHA=$(git rev-parse HEAD~1)  # or origin/main
 HEAD_SHA=$(git rev-parse HEAD)
 ```
 
-### 2. Dispatch Code Reviewer (Background)
+### 2. Dispatch Code Reviewer (always background)
 
-If you have more work to do after the review, dispatch as **background**:
+Always dispatch as a background task — never block the main session:
 
-```typescript
-task(category="unspecified-high", load_skills=[],
+```
+task(subagent_type="general", load_skills=[],
   run_in_background=true,
   description="Code review: [feature name]",
-  prompt=`You are reviewing code changes for quality, correctness, and maintainability.
+  prompt="You are reviewing code changes for quality, correctness, and maintainability.
 
 ## What Was Implemented
 [What you just built — brief description]
@@ -50,101 +50,74 @@ task(category="unspecified-high", load_skills=[],
 BASE_SHA: [base commit]
 HEAD_SHA: [head commit]
 
-Run: git diff ${BASE_SHA}..${HEAD_SHA}
+Run: git diff BASE_SHA..HEAD_SHA
 
 ## Review Checklist
 
-**Correctness:**
+Correctness:
 - Does the code do what the requirements specify?
 - Are there edge cases not handled?
 - Are error paths handled properly?
 
-**Quality:**
+Quality:
 - Is the code clear and maintainable?
 - Are there unnecessary abstractions?
 - Is naming consistent with the codebase?
 
-**Tests:**
+Tests:
 - Are tests meaningful (not just happy path)?
 - Do tests cover the behavior, not the implementation?
 - Are there missing test cases?
 
-**Style:**
+Style:
 - Does it match existing codebase patterns?
 - Any dead code or commented-out code?
 - Any TODO/FIXME without tracking?
 
 ## Report Format
+Strengths: [what's good]
+Issues:
+- Critical: [must fix — bugs, security, data loss]
+- Important: [should fix — maintainability, missing tests]
+- Minor: [note for later — style, naming]
+Assessment: Ready to merge / Needs fixes / Needs discussion")
 
-**Strengths:** [what's good about the implementation]
-**Issues:**
-- Critical: [must fix — bugs, security, data loss risks]
-- Important: [should fix — maintainability, missing tests, unclear logic]
-- Minor: [note for later — style, naming nitpicks]
-**Assessment:** Ready to merge / Needs fixes / Needs discussion`)
+← STOP. End response. Wait for <system-reminder>.
+Then: background_output(task_id="...")
 ```
 
-Continue working on your next task. Collect review when notified.
+### 3. Act on Feedback
 
-### 3. Dispatch Code Reviewer (Blocking)
-
-If this is your last task and you need the result before reporting done:
-
-```typescript
-task(category="unspecified-high", load_skills=[],
-  run_in_background=false,
-  description="Code review: [feature name]",
-  prompt="[same prompt as above]")
-```
-
-### 4. Act on Feedback
-
-When review results arrive:
+When notified → background_output() → read result:
 - **Critical issues** → fix immediately
 - **Important issues** → fix before proceeding
-- **Minor issues** → note for later (or fix if quick)
+- **Minor issues** → note for later
 - **Disagree** → push back with reasoning (use `receiving-code-review` skill)
-
-## When to Use Background vs Blocking
-
-| Situation | Mode | Why |
-|-----------|------|-----|
-| Between tasks in a plan | `run_in_background=true` | Start next task while review runs |
-| Last task before reporting done | `run_in_background=false` | Need result before claiming complete |
-| Before merge/PR | `run_in_background=false` | Must have clean review first |
-| After each subtask in parallel batch | `run_in_background=true` | Don't block other subtasks |
-
-## Integration with Workflows
-
-**Subagent-Driven Development:**
-- Review after EACH task (spec review + quality review)
-- Catch issues before they compound
-- Fix before moving to next task
-
-**Dispatching Parallel Agents:**
-- Fire multiple reviews in parallel for independent tasks
-- Collect all results before final integration
-
-**Executing Plans:**
-- Review after completing each batch of tasks
-- Use as checkpoint before proceeding
 
 ## Session Continuity
 
-If the reviewer finds issues:
-1. Use `task_id` to resume the **original implementer** for fixes
-2. Don't start a fresh agent — the implementer already has context
-3. After fix, request another review (can be lighter — just verify the fix)
+If reviewer finds issues, resume the original implementer as a background task:
 
-```typescript
-// Reviewer found issues
+```
 task(task_id="ses_implementer_xxx", load_skills=[],
-  run_in_background=false,
-  prompt="Reviewer found these issues:\n\n[paste issues]\n\nFix them. Don't change anything else.")
+  run_in_background=true,
+  prompt="Reviewer found these issues:
 
-// Then re-review (lighter)
-task(category="unspecified-high", load_skills=[],
-  run_in_background=false,
+[paste issues]
+
+Fix them. Don't change anything else.")
+
+← STOP. Wait for <system-reminder>.
+```
+
+Then re-review (lighter):
+
+```
+task(subagent_type="general", load_skills=[],
+  run_in_background=true,
   description="Re-review fix for Task N",
-  prompt="Verify that the following issues were fixed:\n[issues]\n\nCheck git diff HEAD~1..HEAD. Confirm fixes are correct and complete.")
+  prompt="Verify these issues were fixed: [issues]
+Check git diff HEAD~1..HEAD. Confirm fixes are correct and complete.")
+
+← STOP. Wait for <system-reminder>.
 ```
