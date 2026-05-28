@@ -11,27 +11,9 @@ You delegate tasks to specialized agents with isolated context. By precisely cra
 
 When you have multiple unrelated failures (different test files, different subsystems, different bugs), investigating them sequentially wastes time. Each investigation is independent and can happen in parallel.
 
-**Core principle:** Dispatch one agent per independent problem domain. Let them work concurrently.
+**Core principle:** Dispatch one agent per independent problem domain. Let them work concurrently via background tasks.
 
 ## When to Use
-
-```dot
-digraph when_to_use {
-    "Multiple failures?" [shape=diamond];
-    "Are they independent?" [shape=diamond];
-    "Single agent investigates all" [shape=box];
-    "One agent per problem domain" [shape=box];
-    "Can they work in parallel?" [shape=diamond];
-    "Sequential agents" [shape=box];
-    "Parallel dispatch" [shape=box];
-
-    "Multiple failures?" -> "Are they independent?" [label="yes"];
-    "Are they independent?" -> "Single agent investigates all" [label="no - related"];
-    "Are they independent?" -> "Can they work in parallel?" [label="yes"];
-    "Can they work in parallel?" -> "Parallel dispatch" [label="yes"];
-    "Can they work in parallel?" -> "Sequential agents" [label="no - shared state"];
-}
-```
 
 **Use when:**
 - 3+ test files failing with different root causes
@@ -42,7 +24,7 @@ digraph when_to_use {
 **Don't use when:**
 - Failures are related (fix one might fix others)
 - Need to understand full system state
-- Agents would interfere with each other
+- Agents would interfere with each other (editing same files)
 
 ## The Pattern
 
@@ -53,7 +35,7 @@ Group failures by what's broken:
 - File B tests: Batch completion behavior
 - File C tests: Abort functionality
 
-Each domain is independent - fixing tool approval doesn't affect abort tests.
+Each domain is independent — fixing tool approval doesn't affect abort tests.
 
 ### 2. Create Focused Agent Tasks
 
@@ -63,30 +45,54 @@ Each agent gets:
 - **Constraints:** Don't change other code
 - **Expected output:** Summary of what you found and fixed
 
-### 3. Dispatch in Parallel
+### 3. Dispatch in Parallel (Background Tasks)
 
 ```typescript
-// In Claude Code / AI environment
-Task("Fix agent-tool-abort.test.ts failures")
-Task("Fix batch-completion-behavior.test.ts failures")
-Task("Fix tool-approval-race-conditions.test.ts failures")
-// All three run concurrently
+// Fire all agents concurrently as background tasks
+task(category="unspecified-high", load_skills=["systematic-debugging"],
+  run_in_background=true,
+  description="Fix abort test failures",
+  prompt="Fix the 3 failing tests in src/agents/agent-tool-abort.test.ts:\n\n1. 'should abort tool with partial output capture'\n2. 'should handle mixed completed and aborted tools'\n3. 'should properly track pendingToolCount'\n\nThese are timing/race condition issues. Read the test file, identify root cause, fix by replacing arbitrary timeouts with event-based waiting. Do NOT just increase timeouts.\n\nReturn: Summary of root cause and what you fixed.")
+
+task(category="unspecified-high", load_skills=["systematic-debugging"],
+  run_in_background=true,
+  description="Fix batch completion failures",
+  prompt="Fix failing tests in src/agents/batch-completion-behavior.test.ts...\n\n[full context here]\n\nReturn: Summary of root cause and what you fixed.")
+
+task(category="unspecified-high", load_skills=["systematic-debugging"],
+  run_in_background=true,
+  description="Fix race condition failures",
+  prompt="Fix failing tests in src/agents/tool-approval-race-conditions.test.ts...\n\n[full context here]\n\nReturn: Summary of root cause and what you fixed.")
+
+// STOP HERE. End your response.
+// Wait for <system-reminder> notifications for each task.
+// Do NOT poll background_output — the system will notify you.
 ```
 
-### 4. Review and Integrate
+### 4. Collect Results
 
-When agents return:
+When `<system-reminder>` arrives for each task:
+
+```typescript
+background_output(task_id="bg_abc123")
+background_output(task_id="bg_def456")
+background_output(task_id="bg_ghi789")
+```
+
+### 5. Review and Integrate
+
+When all agents return:
 - Read each summary
-- Verify fixes don't conflict
+- Verify fixes don't conflict (check for overlapping file edits)
 - Run full test suite
 - Integrate all changes
 
 ## Agent Prompt Structure
 
 Good agent prompts are:
-1. **Focused** - One clear problem domain
-2. **Self-contained** - All context needed to understand the problem
-3. **Specific about output** - What should the agent return?
+1. **Focused** — One clear problem domain
+2. **Self-contained** — All context needed to understand the problem
+3. **Specific about output** — What should the agent return?
 
 ```markdown
 Fix the 3 failing tests in src/agents/agent-tool-abort.test.ts:
@@ -109,74 +115,34 @@ Do NOT just increase timeouts - find the real issue.
 Return: Summary of what you found and what you fixed.
 ```
 
+## Critical Rules
+
+1. **ALWAYS use `run_in_background=true`** — parallel agents must be async
+2. **End your response after dispatching** — do NOT continue with dependent work
+3. **Wait for `<system-reminder>`** — never poll `background_output` immediately
+4. **Collect ALL results before integrating** — don't act on partial results
+5. **Verify no conflicts** — agents working on separate files should not overlap
+
 ## Common Mistakes
 
-**❌ Too broad:** "Fix all the tests" - agent gets lost
-**✅ Specific:** "Fix agent-tool-abort.test.ts" - focused scope
+**❌ Too broad:** "Fix all the tests" — agent gets lost
+**✅ Specific:** "Fix agent-tool-abort.test.ts" — focused scope
 
-**❌ No context:** "Fix the race condition" - agent doesn't know where
+**❌ No context:** "Fix the race condition" — agent doesn't know where
 **✅ Context:** Paste the error messages and test names
 
 **❌ No constraints:** Agent might refactor everything
 **✅ Constraints:** "Do NOT change production code" or "Fix tests only"
 
-**❌ Vague output:** "Fix it" - you don't know what changed
-**✅ Specific:** "Return summary of root cause and changes"
+**❌ Synchronous dispatch:** `task(run_in_background=false)` for independent work
+**✅ Background dispatch:** `task(run_in_background=true)` — parallel execution
+
+**❌ Polling immediately:** Calling `background_output` right after dispatch
+**✅ Wait for notification:** End response, let `<system-reminder>` arrive
 
 ## When NOT to Use
 
-**Related failures:** Fixing one might fix others - investigate together first
+**Related failures:** Fixing one might fix others — investigate together first
 **Need full context:** Understanding requires seeing entire system
 **Exploratory debugging:** You don't know what's broken yet
 **Shared state:** Agents would interfere (editing same files, using same resources)
-
-## Real Example from Session
-
-**Scenario:** 6 test failures across 3 files after major refactoring
-
-**Failures:**
-- agent-tool-abort.test.ts: 3 failures (timing issues)
-- batch-completion-behavior.test.ts: 2 failures (tools not executing)
-- tool-approval-race-conditions.test.ts: 1 failure (execution count = 0)
-
-**Decision:** Independent domains - abort logic separate from batch completion separate from race conditions
-
-**Dispatch:**
-```
-Agent 1 → Fix agent-tool-abort.test.ts
-Agent 2 → Fix batch-completion-behavior.test.ts
-Agent 3 → Fix tool-approval-race-conditions.test.ts
-```
-
-**Results:**
-- Agent 1: Replaced timeouts with event-based waiting
-- Agent 2: Fixed event structure bug (threadId in wrong place)
-- Agent 3: Added wait for async tool execution to complete
-
-**Integration:** All fixes independent, no conflicts, full suite green
-
-**Time saved:** 3 problems solved in parallel vs sequentially
-
-## Key Benefits
-
-1. **Parallelization** - Multiple investigations happen simultaneously
-2. **Focus** - Each agent has narrow scope, less context to track
-3. **Independence** - Agents don't interfere with each other
-4. **Speed** - 3 problems solved in time of 1
-
-## Verification
-
-After agents return:
-1. **Review each summary** - Understand what changed
-2. **Check for conflicts** - Did agents edit same code?
-3. **Run full suite** - Verify all fixes work together
-4. **Spot check** - Agents can make systematic errors
-
-## Real-World Impact
-
-From debugging session (2025-10-03):
-- 6 failures across 3 files
-- 3 agents dispatched in parallel
-- All investigations completed concurrently
-- All fixes integrated successfully
-- Zero conflicts between agent changes

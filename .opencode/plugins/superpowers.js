@@ -76,7 +76,9 @@ export const SuperpowersPlugin = async ({ client, directory }) => {
     const toolMapping = `**Tool Mapping for OpenCode:**
 When skills reference tools you don't have, substitute OpenCode equivalents:
 - \`TodoWrite\` → \`todowrite\`
-- \`Task\` tool with subagents → Use OpenCode's subagent system (@mention)
+- \`Task\` tool (parallel dispatch) → \`task(run_in_background=true, ...)\` — fire and end your response, wait for \`<system-reminder>\` notification, then collect with \`background_output(task_id="...")\`
+- \`Task\` tool (sequential/needs result) → \`task(run_in_background=false, ...)\`
+- Resume same agent with \`task(task_id="ses_xxx", ...)\` instead of spawning fresh for fixes
 - \`Skill\` tool → OpenCode's native \`skill\` tool
 - \`Read\`, \`Write\`, \`Edit\`, \`Bash\` → Your native tools
 
