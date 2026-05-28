@@ -133,19 +133,27 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 ## Execution Handoff
 
-After saving the plan, offer execution choice:
+After saving the plan, count the tasks and offer execution choice:
 
-**"Plan complete and saved to `docs/superpowers/plans/<filename>.md`. Two execution options:**
+**"Plan complete and saved to `docs/superpowers/plans/<filename>.md`.**
 
-**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
+**Execution options:**
 
-**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
+**1. Team Mode (recommended for 4+ tasks)** — Persistent agents in parallel with mailbox communication. Requires `team_mode.enabled: true` and tmux. Full tmux visibility of all agents.
+
+**2. Subagent-Driven** — Background task per task, non-blocking, works everywhere. Best for 1-3 tasks or when team mode is unavailable.
+
+**3. Inline Execution** — Execute tasks in this session with checkpoints. Slowest but most transparent.
 
 **Which approach?"**
 
+**If Team Mode chosen:**
+- **REQUIRED SUB-SKILL:** Use superpowers:subagent-driven-development-team
+- Persistent members, mailbox review loops, tmux grid visualization
+
 **If Subagent-Driven chosen:**
 - **REQUIRED SUB-SKILL:** Use superpowers:subagent-driven-development
-- Fresh subagent per task + two-stage review
+- Background tasks, non-blocking, two-stage review
 
 **If Inline Execution chosen:**
 - **REQUIRED SUB-SKILL:** Use superpowers:executing-plans
