@@ -127,57 +127,26 @@ ${toolMapping}
     // opencode's prompt.ts reloads messages from DB each step.  Fresh message
     // arrays may need injection again, so getBootstrapContent() must not do
     // repeated disk work.
-    // Single messages transform hook — handles both bootstrap injection and
-    // special-token sanitization in one pass.
+    // Inject bootstrap into the first user message of each session.
+    // Using a user message instead of a system message avoids:
+    //   1. Token bloat from system messages repeated every turn (#750)
+    //   2. Multiple system messages breaking Qwen and other models (#894)
+    //
+    // The hook fires on every agent step (not just every turn) because
+    // opencode's prompt.ts reloads messages from DB each step.  Fresh message
+    // arrays may need injection again, so getBootstrapContent() must not do
+    // repeated disk work.
     'experimental.chat.messages.transform': async (_input, output) => {
-      if (!output.messages.length) return;
-
-      // 1. Bootstrap injection (first user message, once per session)
       const bootstrap = getBootstrapContent();
-      if (bootstrap) {
-        const firstUser = output.messages.find(m => m.info.role === 'user');
-        if (firstUser && firstUser.parts.length) {
-          const alreadyInjected = firstUser.parts.some(
-            p => p.type === 'text' && p.text.includes('EXTREMELY_IMPORTANT')
-          );
-          if (!alreadyInjected) {
-            const ref = firstUser.parts[0];
-            firstUser.parts.unshift({ ...ref, type: 'text', text: bootstrap });
-          }
-        }
-      }
+      if (!bootstrap || !output.messages.length) return;
+      const firstUser = output.messages.find(m => m.info.role === 'user');
+      if (!firstUser || !firstUser.parts.length) return;
 
-      // 2. Sanitize assistant messages in history to remove tokens that break
-      //    JSON tool-call parsing in certain models:
-      //    - Gemma 4:      <|token|>  special tokens
-      //    - DeepSeek R1:  ```json\n...\n``` code-fence wrapping
-      for (const message of output.messages) {
-        if (message.info.role !== 'assistant') continue;
-        for (const part of message.parts) {
-          if (part.type !== 'text') continue;
-          // Strip Gemma-style special tokens
-          part.text = part.text.replace(/<\|[^|]*\|>/g, '');
-          // Unwrap markdown code fences wrapping JSON
-          part.text = part.text.replace(/```(?:json)?\n([\s\S]*?)```/g, '$1');
-        }
-      }
-    },
+      // Guard: skip if first user message already contains bootstrap.
+      if (firstUser.parts.some(p => p.type === 'text' && p.text.includes('EXTREMELY_IMPORTANT'))) return;
 
-    // Inject JSON safety rule into system prompt for models known to emit
-    // special tokens or code fences inside tool-call JSON arguments.
-    'experimental.chat.system.transform': async (input, output) => {
-      const modelId = input?.model?.id ?? '';
-      const isProblematic =
-        modelId.includes('gemma') ||
-        modelId.includes('deepseek-r1') ||
-        modelId.includes('qwq');
-      if (!isProblematic) return;
-      output.system.push(
-        'CRITICAL JSON RULE: When calling tools, output ONLY valid JSON in tool arguments. ' +
-        'Do NOT include special tokens like <| or |>. ' +
-        'Do NOT wrap JSON in markdown code fences (```). ' +
-        'Tool argument values must be plain strings parseable by JSON.parse().'
-      );
+      const ref = firstUser.parts[0];
+      firstUser.parts.unshift({ ...ref, type: 'text', text: bootstrap });
     }
   };
 };
