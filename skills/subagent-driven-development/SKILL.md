@@ -172,7 +172,8 @@ If you have questions about requirements, approach, or dependencies — ask now.
 1. Implement exactly what the task specifies
 2. Write tests (TDD if task says to)
 3. Verify implementation works
-4. Commit your work
+  4. Commit your work — use conventional commit format (`feat:`, `fix:`, `chore:`, etc.)
+     NEVER include Jira story IDs (e.g. BLEAGLE-1234) in commit messages
 5. Self-review: missing requirements, dead code, unclear naming
 6. Report back: what you built, files changed, concerns
 

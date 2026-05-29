@@ -40,7 +40,7 @@ This structure informs the task decomposition. Each task should produce self-con
 - "Run it to make sure it fails" - step
 - "Implement the minimal code to make the test pass" - step
 - "Run the tests and make sure they pass" - step
-- "Commit" - step
+- "Commit" — use conventional format: `feat:`, `fix:`, `chore:`. NEVER include Jira IDs (e.g. BLEAGLE-1234) in commit messages
 
 ## Plan Document Header
 
